@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quantum Maze Solver</title>
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: #0e1d31;
+      --panel-light: #142942;
+      --line: #24415f;
+      --text: #e8f1ff;
+      --muted: #9eb4cc;
+      --cyan: #45e4d1;
+      --blue: #5da9ff;
+      --gold: #ffd166;
+      --red: #ff6b7a;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #143457, var(--bg) 48%);
+      font: 16px/1.5 system-ui, -apple-system, Segoe UI, sans-serif;
+    }
+    main { width: min(1320px, 95vw); margin: 0 auto; padding: 38px 0 52px; }
+    .eyebrow { color: var(--cyan); letter-spacing: .16em; text-transform: uppercase; font-size: .75rem; font-weight: 800; }
+    h1 { margin: 5px 0 8px; font-size: clamp(2rem, 5vw, 4rem); line-height: 1; }
+    .intro { max-width: 720px; color: var(--muted); margin: 0 0 28px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, .9fr); gap: 22px; align-items: start; }
+    .card { min-width: 0; overflow: hidden; background: color-mix(in srgb, var(--panel) 91%, transparent); border: 1px solid var(--line); border-radius: 18px; padding: 20px; box-shadow: 0 20px 55px #0005; }
+    .maze-wrap { display: grid; place-items: center; min-width: 0; width: 100%; overflow: hidden; padding: 12px; background: #081522; border-radius: 12px; }
+    #maze { display: grid; width: 100%; max-width: 640px; min-width: 0; aspect-ratio: 1; gap: 2px; }
+    .cell { border: 0; border-radius: 3px; background: #d7e5ef; cursor: pointer; min-width: 0; transition: transform .12s, background .15s, box-shadow .15s; }
+    .cell:hover { transform: scale(.93); }
+    .cell.wall { background: #162a40; box-shadow: inset 0 0 0 2px #294967; }
+    .cell.start { background: var(--cyan); color: #05221f; }
+    .cell.goal { background: var(--gold); color: #3a2700; }
+    .cell.visited { background: #5799d1; }
+    .cell.frontier { background: #a7d2ff; }
+    .cell.path { background: var(--cyan); box-shadow: 0 0 13px #45e4d188; }
+    .cell.oracle { background: #d69a58; box-shadow: 0 0 10px #d69a5888; }
+    .cell.current { outline: 3px solid white; outline-offset: 1px; }
+    .cell span { display: block; font-size: clamp(.65rem, 2vw, 1rem); font-weight: 900; }
+    .controls, .presets { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
+    button, select, input[type="range"] { font: inherit; }
+    button, select {
+      color: var(--text); background: var(--panel-light); border: 1px solid #356086;
+      border-radius: 9px; padding: 9px 13px; cursor: pointer;
+    }
+    button:hover, select:hover { border-color: var(--cyan); }
+    button.primary { color: #05221f; background: var(--cyan); border-color: var(--cyan); font-weight: 800; }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    .settings { display: flex; align-items: center; gap: 12px; color: var(--muted); margin-top: 17px; }
+    input[type="range"] { accent-color: var(--cyan); width: 150px; }
+    .status { min-height: 48px; display: flex; align-items: center; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+    .status strong { color: var(--text); }
+    h2 { font-size: 1.05rem; margin: 20px 0 10px; }
+    .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .stat { background: #091829; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+    .stat b { display: block; min-width: 0; color: var(--cyan); font-size: 1.35rem; overflow-wrap: anywhere; word-break: break-word; }
+    .stat small { color: var(--muted); }
+    #candidates { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 6px; max-height: 180px; overflow: auto; }
+    .candidate { padding: 6px; text-align: center; border-radius: 6px; background: #12263c; color: var(--muted); font: .78rem ui-monospace, monospace; }
+    .candidate.checked { background: #244665; color: var(--text); }
+    .candidate.solution { background: var(--cyan); color: #06221f; font-weight: 800; }
+    .comparison { display: none; margin-top: 22px; }
+    .comparison.active { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; }
+    .comparison .card { min-width: 0; }
+    .comparison h2 { margin-top: 0; }
+    .comparison-method { color: var(--muted); font-size: .9rem; min-height: 48px; margin: -4px 0 14px; }
+    .comparison-maze { display: grid; width: 100%; max-width: 540px; min-width: 0; aspect-ratio: 1; gap: 2px; margin: 0 auto; }
+    .comparison-status { min-height: 48px; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+    .comparison-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; color: var(--muted); margin-top: 12px; }
+    .comparison-stats b { color: var(--text); }
+    .comparison-stat { background: #091829; border: 1px solid var(--line); border-radius: 8px; padding: 8px; text-align: center; }
+    .comparison-stat b { display: block; overflow-wrap: anywhere; word-break: break-word; color: var(--cyan); }
+    .comparison-note { color: var(--muted); font-size: .8rem; margin-bottom: 0; }
+    .quantum-accent { border-color: #258f87; }
+    .classical-accent { border-color: #356086; }
+    .legend { color: var(--muted); font-size: .85rem; margin-top: 14px; }
+    .legend span { display: inline-block; margin-right: 12px; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; background: var(--cyan); }
+    .dot.wall { background: #162a40; border: 1px solid #356086; }
+    .dot.goal { background: var(--gold); }
+    @media (max-width: 900px) {
+      .layout, .comparison.active { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Qiskit-inspired maze laboratory</div>
+    <h1>Quantum Maze Solver</h1>
+    <p class="intro">Edit the maze, then watch the solver find the shortest path. The browser visualizes the same stages as the Python Qiskit program: shortest-depth discovery, oracle marking, and measured solution.</p>
+
+    <section class="layout">
+      <div class="card">
+        <h2>Maze editor / shortest-path result</h2>
+        <div class="maze-wrap"><div id="maze" aria-label="Editable maze"></div></div>
+        <div class="legend">
+          <span><i class="dot"></i>path</span><span><i class="dot wall"></i>wall</span><span><i class="dot goal"></i>goal</span>
+          <span>Click an empty cell to toggle a wall.</span>
+        </div>
+        <div class="presets">
+          <button data-preset="demo">Demo maze</button>
+          <button data-preset="open">Open maze</button>
+          <button id="random">Generate maze</button>
+        </div>
+        <div class="controls">
+          <button class="primary" id="solve">▶ Solve maze</button>
+          <button id="compare">⇄ Compare both</button>
+          <button id="reset">Reset animation</button>
+        </div>
+        <label class="settings">Animation speed
+          <input id="speed" type="range" min="40" max="600" value="180">
+          <span id="speed-label">180 ms</span>
+        </label>
+      </div>
+
+      <aside class="card">
+        <div class="status" id="status"><strong>Ready.</strong>&nbsp; Choose a maze and start the solver.</div>
+        <h2>Run statistics</h2>
+        <div class="stats">
+          <div class="stat"><b id="depth">—</b><small>shortest path length</small></div>
+          <div class="stat"><b id="qubits">—</b><small>search qubits</small></div>
+          <div class="stat"><b id="checked">0</b><small>oracle states visualized</small></div>
+          <div class="stat"><b id="result">—</b><small>measured path</small></div>
+        </div>
+        <h2>Oracle candidates</h2>
+        <div id="candidates"><span class="legend">Candidates appear when the oracle runs.</span></div>
+        <p class="legend">This is an educational comparison. The actual quantum circuit is implemented in <code>test.py</code> and runs with Qiskit Aer; browser animation time is not a hardware speed benchmark.</p>
+      </aside>
+    </section>
+    <section class="comparison" id="comparison">
+      <article class="card classical-accent">
+        <h2>Classical BFS</h2>
+        <p class="comparison-method">Checks one cell, adds its neighbors to a queue, and repeats until the goal is reached.</p>
+        <div class="comparison-status" id="classical-status">Explores one frontier at a time until it reaches G.</div>
+        <div class="maze-wrap"><div class="comparison-maze" id="classical-maze"></div></div>
+        <div class="comparison-stats">
+          <div class="comparison-stat">visited<b id="classical-visited">0</b></div>
+          <div class="comparison-stat">path steps<b id="classical-steps">—</b></div>
+          <div class="comparison-stat">time<b id="classical-time">—</b></div>
+        </div>
+        <p class="comparison-note">Blue cells are already visited; the white outline is the current BFS cell.</p>
+      </article>
+      <article class="card quantum-accent">
+        <h2>Quantum / Grover</h2>
+        <p class="comparison-method">Encodes candidate move strings into qubits, marks valid states with an oracle, then measures a solution.</p>
+        <div class="comparison-status" id="quantum-status">Marks candidate paths in a shared superposition, then measures one.</div>
+        <div class="maze-wrap"><div class="comparison-maze" id="quantum-maze"></div></div>
+        <div class="comparison-stats">
+          <div class="comparison-stat">visualized<b id="quantum-states">0</b></div>
+          <div class="comparison-stat">qubits<b id="quantum-qubits">—</b></div>
+          <div class="comparison-stat">time<b id="quantum-time">—</b></div>
+        </div>
+        <p class="comparison-note">Orange is the current oracle candidate; cyan is the measured shortest path.</p>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const SIZE = 21;
+    const MAX_DISPLAYED_STATES = 96;
+    const moves = { U: [-1, 0], D: [1, 0], L: [0, -1], R: [0, 1] };
+    let grid = generateMaze();
+    let timer = null;
+    let comparisonTimers = [];
+    let comparisonRunning = false;
+    let runId = 0;
+
+    const maze = document.querySelector("#maze");
+    const status = document.querySelector("#status");
+    const candidates = document.querySelector("#candidates");
+    const speed = document.querySelector("#speed");
+
+    function setStatus(text) { status.innerHTML = text; }
+    function isRunning() { return Boolean(timer) || comparisonRunning; }
+    function generateMaze() {
+      const maze = Array.from({ length: SIZE }, () => Array(SIZE).fill("#"));
+      const stack = [[1, 1]];
+      maze[1][1] = ".";
+      while (stack.length) {
+        const [row, column] = stack[stack.length - 1];
+        const choices = [[-2, 0], [2, 0], [0, -2], [0, 2]]
+          .map(([dr, dc]) => [row + dr, column + dc, dr, dc])
+          .filter(([nextRow, nextColumn]) =>
+            nextRow > 0 && nextRow < SIZE - 1 && nextColumn > 0 && nextColumn < SIZE - 1 &&
+            maze[nextRow][nextColumn] === "#");
+        if (!choices.length) {
+          stack.pop();
+          continue;
+        }
+        const [nextRow, nextColumn, dr, dc] = choices[Math.floor(Math.random() * choices.length)];
+        maze[row + dr / 2][column + dc / 2] = ".";
+        maze[nextRow][nextColumn] = ".";
+        stack.push([nextRow, nextColumn]);
+      }
+      maze[1][1] = "S";
+      maze[SIZE - 2][SIZE - 2] = "G";
+      return maze;
+    }
+    function openMaze() {
+      const maze = Array.from({ length: SIZE }, () => Array(SIZE).fill("."));
+      maze[1][1] = "S";
+      maze[SIZE - 2][SIZE - 2] = "G";
+      return maze;
+    }
+    function locate(char) {
+      for (let r = 0; r < grid.length; r++) for (let c = 0; c < grid[r].length; c++)
+        if (grid[r][c] === char) return [r, c];
+      return null;
+    }
+    function render() {
+      maze.style.gridTemplateColumns = `repeat(${grid[0].length}, 1fr)`;
+      maze.innerHTML = "";
+      grid.forEach((row, r) => row.forEach((cell, c) => {
+        const el = document.createElement("button");
+        el.className = `cell ${cell === "#" ? "wall" : ""} ${cell === "S" ? "start" : ""} ${cell === "G" ? "goal" : ""}`;
+        el.innerHTML = cell === "S" ? "<span>S</span>" : cell === "G" ? "<span>G</span>" : "";
+        el.title = "Click to toggle wall";
+        el.addEventListener("click", () => {
+          if (isRunning() || cell === "S" || cell === "G") return;
+          grid[r][c] = cell === "#" ? "." : "#";
+          render();
+          refreshComparisonPreview();
+        });
+        maze.appendChild(el);
+      }));
+    }
+    function resetView(message = "<strong>Ready.</strong>&nbsp; Choose a maze and start the solver.") {
+      clearTimeout(timer); timer = null;
+      comparisonTimers.forEach(clearTimeout); comparisonTimers = [];
+      comparisonRunning = false;
+      runId++;
+      document.querySelector("#depth").textContent = "—";
+      document.querySelector("#qubits").textContent = "—";
+      document.querySelector("#checked").textContent = "0";
+      document.querySelector("#result").textContent = "—";
+      document.querySelector("#classical-visited").textContent = "0";
+      document.querySelector("#classical-steps").textContent = "—";
+      document.querySelector("#classical-time").textContent = "—";
+      document.querySelector("#quantum-states").textContent = "0";
+      document.querySelector("#quantum-qubits").textContent = "—";
+      document.querySelector("#quantum-time").textContent = "—";
+      candidates.innerHTML = '<span class="legend">Candidates appear when the oracle runs.</span>';
+      document.querySelector("#solve").disabled = false;
+      setStatus(message);
+      render();
+      refreshComparisonPreview();
+    }
+    function refreshComparisonPreview() {
+      if (!document.querySelector("#comparison").classList.contains("active")) return;
+      const state = grid.map(row => [...row]);
+      renderComparisonMaze(document.querySelector("#classical-maze"), state);
+      renderComparisonMaze(document.querySelector("#quantum-maze"), state);
+      document.querySelector("#classical-status").innerHTML =
+        "<strong>Ready.</strong>&nbsp; Press Compare both to start BFS.";
+      document.querySelector("#quantum-status").innerHTML =
+        "<strong>Ready.</strong>&nbsp; Press Compare both to start Grover visualization.";
+    }
+    function renderComparisonMaze(container, state) {
+      container.style.gridTemplateColumns = `repeat(${state[0].length}, 1fr)`;
+      container.innerHTML = "";
+      state.forEach((row, r) => row.forEach((cell, c) => {
+        const el = document.createElement("div");
+        el.className = `cell ${cell === "#" ? "wall" : ""} ${cell === "S" ? "start" : ""} ${cell === "G" ? "goal" : ""}`;
+        el.dataset.row = r;
+        el.dataset.column = c;
+        el.innerHTML = cell === "S" ? "<span>S</span>" : cell === "G" ? "<span>G</span>" : "";
+        container.appendChild(el);
+      }));
+    }
+    function markComparisonCell(container, row, column, className) {
+      const cell = container.querySelector(`[data-row="${row}"][data-column="${column}"]`);
+      if (cell && !cell.classList.contains("start") && !cell.classList.contains("goal")) cell.classList.add(className);
+    }
+    function clearComparisonClass(container, className) {
+      container.querySelectorAll(`.${className}`).forEach(cell => cell.classList.remove(className));
+    }
+    function createBfsTrace(state) {
+      const start = locateIn(state, "S"), goal = locateIn(state, "G");
+      const queue = [[start, ""]];
+      const seen = new Set([start.join(",")]);
+      const trace = [];
+      while (queue.length) {
+        const [position, path] = queue.shift();
+        trace.push({ position, path });
+        if (position[0] === goal[0] && position[1] === goal[1]) return { trace, path };
+        for (const [move, [dr, dc]] of Object.entries(moves)) {
+          const next = [position[0] + dr, position[1] + dc];
+          const key = next.join(",");
+          if (next[0] >= 0 && next[0] < state.length && next[1] >= 0 && next[1] < state[0].length &&
+              state[next[0]][next[1]] !== "#" && !seen.has(key)) {
+            seen.add(key);
+            queue.push([next, path + move]);
+          }
+        }
+      }
+      return { trace, path: null };
+    }
+    function locateIn(state, char) {
+      for (let r = 0; r < state.length; r++) for (let c = 0; c < state[r].length; c++)
+        if (state[r][c] === char) return [r, c];
+      return null;
+    }
+    function paintComparisonPath(container, state, path, count) {
+      let position = locateIn(state, "S");
+      for (let i = 0; i < count; i++) {
+        position = [position[0] + moves[path[i]][0], position[1] + moves[path[i]][1]];
+        if (position[0] < 0 || position[0] >= state.length || position[1] < 0 ||
+            position[1] >= state[0].length || state[position[0]][position[1]] === "#") return;
+        markComparisonCell(container, position[0], position[1], "oracle");
+      }
+    }
+    function compareAlgorithms() {
+      resetView("<strong>Comparison ready.</strong>&nbsp; Both algorithms are running on the same maze.");
+      const state = grid.map(row => [...row]);
+      document.querySelector("#comparison").classList.add("active");
+      comparisonRunning = true;
+      const classicalMaze = document.querySelector("#classical-maze");
+      const quantumMaze = document.querySelector("#quantum-maze");
+      renderComparisonMaze(classicalMaze, state);
+      renderComparisonMaze(quantumMaze, state);
+      const { trace, path } = createBfsTrace(state);
+      if (!path) {
+        document.querySelector("#classical-status").textContent = "No path found.";
+        document.querySelector("#quantum-status").textContent = "No solution to measure.";
+        return;
+      }
+      const { found: pool, total } = candidatePool(path.length, path);
+      document.querySelector("#classical-steps").textContent = path.length;
+      document.querySelector("#quantum-qubits").textContent = path.length * 2;
+      document.querySelector("#quantum-states").textContent = total.toLocaleString();
+      document.querySelector("#solve").disabled = true;
+      document.querySelector("#compare").disabled = true;
+      let index = 0;
+      let classicalDone = false;
+      let quantumDone = false;
+      const classicalStart = performance.now();
+      const quantumStart = classicalStart;
+      function finishComparisonIfReady() {
+        if (!classicalDone || !quantumDone) return;
+        comparisonRunning = false;
+        document.querySelector("#solve").disabled = false;
+        document.querySelector("#compare").disabled = false;
+        comparisonTimers = [];
+      }
+      function classicalTick() {
+        const item = trace[index];
+        if (!item) {
+          document.querySelector("#classical-status").innerHTML = `<strong>Finished.</strong> BFS visited ${trace.length} cells.`;
+          document.querySelector("#classical-time").textContent = `${Math.round(performance.now() - classicalStart)} ms`;
+          classicalDone = true;
+          finishComparisonIfReady();
+          return;
+        }
+        clearComparisonClass(classicalMaze, "current");
+        markComparisonCell(classicalMaze, item.position[0], item.position[1], "visited");
+        markComparisonCell(classicalMaze, item.position[0], item.position[1], "current");
+        document.querySelector("#classical-visited").textContent = index + 1;
+        document.querySelector("#classical-time").textContent = `${Math.round(performance.now() - classicalStart)} ms`;
+        document.querySelector("#classical-status").textContent = `Exploring frontier cell ${index + 1} of ${trace.length}...`;
+        index++;
+        comparisonTimers.push(setTimeout(classicalTick, Number(speed.value)));
+      }
+      let candidateIndex = 0;
+      function quantumTick() {
+        if (candidateIndex < pool.length) {
+          document.querySelector("#quantum-status").textContent =
+            `Oracle marking candidate ${candidateIndex + 1} of ${pool.length} visualized...`;
+          clearComparisonClass(quantumMaze, "oracle");
+          clearComparisonClass(quantumMaze, "path");
+          paintComparisonPath(quantumMaze, state, pool[candidateIndex], pool[candidateIndex].length);
+          candidateIndex++;
+          document.querySelector("#quantum-states").textContent =
+            total > pool.length ? `${candidateIndex}/${total.toLocaleString()}` : candidateIndex;
+            document.querySelector("#quantum-time").textContent = `${Math.round(performance.now() - quantumStart)} ms`;
+          comparisonTimers.push(setTimeout(quantumTick, Number(speed.value)));
+          return;
+        }
+        clearComparisonClass(quantumMaze, "oracle");
+        paintComparisonPath(quantumMaze, state, path, path.length);
+        quantumMaze.querySelectorAll(".oracle").forEach(cell => cell.classList.replace("oracle", "path"));
+        document.querySelector("#quantum-status").innerHTML = `<strong>Measured.</strong> Grover returned <code>${path}</code>.`;
+        document.querySelector("#quantum-time").textContent = `${Math.round(performance.now() - quantumStart)} ms`;
+        paintPath(path, path.length);
+        document.querySelector("#result").textContent = path;
+        quantumDone = true;
+        finishComparisonIfReady();
+      }
+      classicalTick();
+      quantumTick();
+    }
+    function walk(path) {
+      const start = locate("S"), goal = locate("G");
+      let r = start[0], c = start[1];
+      for (const move of path) {
+        r += moves[move][0]; c += moves[move][1];
+        if (r < 0 || r >= grid.length || c < 0 || c >= grid[0].length || grid[r][c] === "#") return null;
+      }
+      return [r, c];
+    }
+    function shortestPath() {
+      const start = locate("S"), goal = locate("G"), queue = [[start, ""]];
+      const seen = new Set([start.join(",")]);
+      while (queue.length) {
+        const [position, path] = queue.shift();
+        if (position[0] === goal[0] && position[1] === goal[1]) return path;
+        for (const [move, [dr, dc]] of Object.entries(moves)) {
+          const next = [position[0] + dr, position[1] + dc];
+          const key = next.join(",");
+          if (next[0] >= 0 && next[0] < grid.length && next[1] >= 0 && next[1] < grid[0].length &&
+              grid[next[0]][next[1]] !== "#" && !seen.has(key)) {
+            seen.add(key); queue.push([next, path + move]);
+          }
+        }
+      }
+      return null;
+    }
+    function candidatePool(length, solution) {
+      const total = 4 ** length;
+      const limit = Math.min(total, MAX_DISPLAYED_STATES);
+      const found = [];
+      function build(path) {
+        if (found.length >= limit) return;
+        if (path.length === length) {
+          found.push(path);
+          return;
+        }
+        for (const move of Object.keys(moves)) build(path + move);
+      }
+      build("");
+      if (!found.includes(solution)) {
+        found[found.length - 1] = solution;
+      }
+      return { found, total };
+    }
+    function paintPath(path, currentIndex = path.length) {
+      [...maze.children].forEach((el, index) => {
+        el.classList.remove("path", "current");
+        const r = Math.floor(index / grid[0].length), c = index % grid[0].length;
+        let position = locate("S");
+        for (let i = 0; i < currentIndex; i++) {
+          position = [position[0] + moves[path[i]][0], position[1] + moves[path[i]][1]];
+          if (position[0] === r && position[1] === c) el.classList.add("path");
+        }
+        if (currentIndex < path.length) {
+          const next = [position[0] + moves[path[currentIndex]][0], position[1] + moves[path[currentIndex]][1]];
+          if (next[0] === r && next[1] === c) el.classList.add("current");
+        }
+      });
+    }
+    function solve() {
+      resetView("<strong>Preparing.</strong>&nbsp; BFS is finding the shortest possible path length...");
+      const thisRun = runId;
+      const path = shortestPath();
+      if (!path) { setStatus("<strong>No solution.</strong>&nbsp; Add openings so S can reach G."); return; }
+      const { found: pool, total: stateCount } = candidatePool(path.length, path);
+      document.querySelector("#depth").textContent = path.length;
+      document.querySelector("#qubits").textContent = path.length * 2;
+      document.querySelector("#solve").disabled = true;
+      const stateDescription = stateCount > pool.length
+        ? `${pool.length} of ${stateCount.toLocaleString()} states`
+        : `${pool.length} states`;
+      setStatus(`<strong>Shortest depth found.</strong>&nbsp; Grover oracle is visualizing ${stateDescription}.`);
+      candidates.innerHTML = pool.map((candidate, i) => `<span class="candidate" id="candidate-${i}">${candidate}</span>`).join("");
+      let i = 0;
+      function check() {
+        if (thisRun !== runId) return;
+        if (i < pool.length) {
+          document.querySelector(`#candidate-${i}`).classList.add("checked");
+          document.querySelector("#checked").textContent = i + 1;
+          i++;
+          timer = setTimeout(check, Number(speed.value));
+          return;
+        }
+        const solutionIndex = pool.indexOf(path);
+        document.querySelector(`#candidate-${solutionIndex}`).classList.add("solution");
+        document.querySelector("#result").textContent = path;
+        setStatus("<strong>Measurement succeeded.</strong>&nbsp; Playing the measured path on the maze.");
+        playPath(path, thisRun, 0);
+      }
+      timer = setTimeout(check, Number(speed.value));
+    }
+    function playPath(path, thisRun, index) {
+      if (thisRun !== runId) return;
+      paintPath(path, index);
+      if (index < path.length) timer = setTimeout(() => playPath(path, thisRun, index + 1), Number(speed.value));
+      else { timer = null; setStatus(`<strong>Solved.</strong>&nbsp; Measured path <code>${path}</code> reaches G.`); document.querySelector("#solve").disabled = false; }
+    }
+    document.querySelector("[data-preset='demo']").addEventListener("click", () => {
+      grid = generateMaze(); resetView();
+    });
+    document.querySelector("[data-preset='open']").addEventListener("click", () => {
+      grid = openMaze(); resetView();
+    });
+    document.querySelector("#random").addEventListener("click", () => {
+      grid = generateMaze(); resetView("<strong>New maze generated.</strong>&nbsp; Every open cell is connected.");
+    });
+    document.querySelector("#solve").addEventListener("click", solve);
+    document.querySelector("#compare").addEventListener("click", compareAlgorithms);
+    document.querySelector("#reset").addEventListener("click", resetView);
+    speed.addEventListener("input", () => document.querySelector("#speed-label").textContent = `${speed.value} ms`);
+    render();
+  </script>
+</body>
+</html>
